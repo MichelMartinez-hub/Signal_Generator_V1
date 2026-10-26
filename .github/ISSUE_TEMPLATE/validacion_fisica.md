@@ -1,35 +1,35 @@
 ---
-name: Validación física
-about: Registrar un ensayo de banco reproducible
-title: '[Validación] '
+name: Physical hardware validation
+about: Record a reproducible bench test
+title: '[Validation] '
 ---
 
-## Estado
+## Status
 
-Pendiente. No marcar como completado sin medidas y evidencia.
+Pending. Do not mark complete without measurements and evidence.
 
-## Identificación
+## Identification
 
 - Commit:
-- Placa/revisión:
-- Esquema y alimentación:
-- PlatformIO/plataforma/toolchain:
-- Instrumentos y configuración:
+- Board/revision:
+- Schematic and power supply:
+- PlatformIO/platform/toolchain:
+- Instruments and configuration:
 
-## Ensayo
+## Test
 
-- Modo y forma de onda:
-- Frecuencia, amplitud y offset solicitados:
-- Punto de medida y carga:
-- Procedimiento:
-- Tolerancia de aceptación acordada:
+- Mode and waveform:
+- Requested frequency, amplitude, and offset:
+- Measurement point and load:
+- Procedure:
+- Agreed acceptance tolerance:
 
-## Resultados
+## Results
 
-- Frecuencia medida:
+- Measured frequency:
 - Vmin / Vmax / Vpp / offset:
-- Latencia o incidencias:
-- Capturas y logs:
-- Resultado: pendiente / aprobado / fallido
+- Latency or issues:
+- Screenshots and logs:
+- Result: pending / passed / failed
 
-Consultar docs/VALIDACION.md antes de cerrar la validación.
+Consult docs/VALIDACION.md before closing hardware validation.
