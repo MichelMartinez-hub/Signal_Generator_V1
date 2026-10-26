@@ -1,80 +1,57 @@
-# Integración de Signal_Generator_V1
+# Signal_Generator_V1 integration history
 
-Fecha: 26 de octubre de 2026.
-Proyecto actualizado directamente: Signal_Generator_V1
-Origen: Signal_Generator_V1_COMPLETO.zip.
+Date: October 26, 2026. Project: Signal_Generator_V1. Source package: Signal_Generator_V1_COMPLETO.zip.
 
-## Archivos y código integrados
+## Integrated files and code
 
-- Añadidos README.md, docs/ARCHITECTURE.md y tests_host/.
-- Completados los cuatro archivos vacíos de protocolo: protocol.c/.h y crc8.c/.h. El checksum es XOR heredado; el protocolo binario sigue siendo opcional y no se ha conectado a la CLI.
-- Incorporadas las mejoras funcionales del ZIP en DAC, TIM6, WaveOutput, reloj y temporizador del scheduler.
-- Conservados los módulos locales equivalentes, comentarios, APIs y constantes públicas. No se copiaron versiones alternativas de main, ISR, librerías ni una carpeta de proyecto anidada.
-- Conservados placa, plataforma y framework de platformio.ini; añadidas opciones C11 y advertencias. .gitignore combina las reglas previas y las del ZIP.
+- Added README.md, docs/ARCHITECTURE.md, and tests_host/.
+- Completed the four empty protocol files: protocol.c/.h and crc8.c/.h. The checksum is inherited XOR; the binary protocol remains optional and is not connected to the CLI.
+- Incorporated functional ZIP improvements for DAC, TIM6, WaveOutput, clock setup, and the scheduler timer.
+- Preserved equivalent local modules, comments, APIs, and public constants. No alternative main functions, interrupt handlers, libraries, or nested project copy were added.
+- Preserved the board, platform, and framework in platformio.ini; added C11 and compiler warning flags. .gitignore combines existing and package rules.
 
-## Correcciones
+## Fixes
 
-1. **NULL sin definición en generator.c:** añadido <stddef.h>, evitando depender de inclusiones indirectas.
-2. **Frecuencias inconsistentes:** antes la CLI y los controles admitían 1–100 Hz, generator_config.h declaraba hasta 10000 Hz y las API aceptaban cualquier frecuencia positiva. Ahora CLI, controles, Generator y los dos backends usan el mismo rango de 1–100 Hz y rechazan NaN, infinito y valores fuera de rango antes de iniciar la salida. Se conservan las constantes públicas de amplitud y offset. Este cambio reduce expresamente el máximo anunciado por la configuración anterior; no certifica rendimiento de MATH.
-3. **Frecuencia inicial:** reducida de 100 Hz a 10 Hz, conforme al paquete integrado.
-4. **TIM6:** reinicia CNT al configurar la frecuencia, redondea al intervalo más cercano, acepta el intervalo válido de 65536 ticks y limpia IRQ/callback al inicializar. Evita arranques con contador residual y la exclusión incorrecta del extremo superior de ARR.
-5. **DAC y cambios de modo:** inicializa la salida a media escala, deshabilita la interrupción de underrun no atendida y limpia la bandera de underrun al inicializar/detener. WaveOutput detiene primero el temporizador y la IRQ, desactiva DMA/trigger y limpia el estado antes de reiniciar. Esto permite recuperar un arranque tras underrun; no añade detección de fallo en la FSM.
-6. **Reloj:** configura explícitamente los divisores AHB/APB en 1 y actualiza SystemCoreClock para concordar con las constantes de 16 MHz; antes solo seleccionaba HSI.
-7. **Scheduler:** su frecuencia de interrupción se deriva de SCHEDULER_TIMER_TICK_MS y se comprueban los divisores en compilación, en vez de mantener un valor separado fijo de 100 Hz.
-8. **Pruebas:** añadidas las del ZIP, ampliadas para límites de frecuencia, NULL, tramas vacías, payload máximo, checksum incorrecto, capacidad insuficiente y tramas truncadas. Añadido tests_host/run.ps1 para Windows con GCC.
+1. **Undefined NULL in generator.c:** added <stddef.h> rather than relying on indirect includes.
+2. **Inconsistent frequency limits:** the CLI and controls previously accepted 1–100 Hz, generator_config.h declared up to 10000 Hz, and APIs accepted any positive frequency. The CLI, controls, Generator, and both backends now share 1–100 Hz limits and reject NaN, infinity, and out-of-range values before starting. Public amplitude and offset constants were retained. This explicitly reduces the maximum previously advertised by configuration; it does not certify MATH performance.
+3. **Initial frequency:** reduced from 100 Hz to 10 Hz, matching the integrated package.
+4. **TIM6:** resets CNT when setting frequency, rounds to the nearest interval, accepts the valid 65536-tick interval, and clears IRQ/callback state during initialization. This avoids residual-counter starts and an incorrect exclusion of the upper ARR endpoint.
+5. **DAC and mode changes:** initializes output at midscale, disables the unhandled underrun interrupt, and clears underrun on initialization/stop. WaveOutput stops the timer and IRQ, disables DMA/trigger, and clears state before restarting. This allows restart after an underrun; it does not add FSM fault detection.
+6. **Clock:** explicitly sets AHB/APB dividers to 1 and updates SystemCoreClock to match the 16 MHz constants; the previous code only selected HSI.
+7. **Scheduler:** derives interrupt frequency from SCHEDULER_TIMER_TICK_MS and checks dividers at compile time instead of maintaining a separate fixed 100 Hz value.
+8. **Tests:** incorporated package tests and expanded coverage for frequency limits, NULL, empty frames, maximum payload, invalid checksum, insufficient capacity, and truncated frames. Added tests_host/run.ps1 for Windows with GCC.
 
-## Validación y límites reales
+## Current validation status
 
-**Actualización del propietario (26-10-2026): el proyecto compiló correctamente. La validación física permanece pendiente.** El diagnóstico de DLL que sigue describe únicamente el intento histórico del agente; no representa el estado actual de compilación del proyecto. Las pruebas de host siguen sin una ejecución satisfactoria confirmada.
+**Owner update (2026-10-26): the project compiled successfully. Physical hardware validation remains pending.** A successful host-test run has not yet been confirmed.
 
-La revisión estática pasó:
-- main: definición única
-- TIM3_IRQHandler: definición única
-- TIM6_DAC_IRQHandler: definición única
-- USART2_IRQHandler: definición única
-- Includes internos: todos resueltos
-- Macros de registros añadidas: presentes en CMSIS instalado
-- No se eliminó ningún archivo original
+The integration static review checked:
 
-**Compilación ARM: no completada.** Se ejecutó PlatformIO para nucleo_f446re; resolvió la plataforma ST STM32 19.7.1, CMSIS y GCC ARM 7.2.1, pero Windows no pudo iniciar el compilador: `{Illegal System DLL Relocation}` / `The system cannot execute the specified program`. Falló al compilar los archivos de arranque de CMSIS, antes de compilar el código del proyecto. Las herramientas alternativas instaladas de STM32CubeIDE y Clang fallaron al iniciarse con el mismo error de DLL. No se reemplazó ninguna instalación.
+- One definition each of main, TIM3_IRQHandler, TIM6_DAC_IRQHandler, and USART2_IRQHandler.
+- All internal includes resolved.
+- Added register macros present in installed CMSIS headers.
+- No original project files deleted.
 
-**Pruebas de host: no ejecutadas.** El GCC de MinGW local también falla al iniciar con `{Illegal System DLL Relocation}`. Los tests quedan preparados, sin afirmar que pasaron.
+### Historical agent environment diagnostics
 
-Para verificar tras resolver el entorno:
+The initial agent-side ARM build could not complete. PlatformIO resolved ST STM32 19.7.1, CMSIS, and GCC ARM 7.2.1, but Windows failed to launch the compiler with `{Illegal System DLL Relocation}` / `The system cannot execute the specified program`. The failure occurred while compiling CMSIS startup files, before compiling project code. Installed STM32CubeIDE and Clang alternatives failed to launch with the same DLL issue. No tool installations were replaced.
+
+The native MinGW GCC also failed to start, preventing host-test execution. These historical environment failures do not override the owner's later confirmation of a successful firmware build.
+
+To reproduce software checks in a working environment:
 
 ```powershell
 cd Signal_Generator_V1
-& pio run
+pio run
 powershell -ExecutionPolicy Bypass -File tests_host/run.ps1
 ```
 
-No se cargó firmware ni se probó una placa. Sigue pendiente comprobar las señales con osciloscopio y medir la carga de MATH: sinf() por muestra a 16 MHz puede exceder el presupuesto de la ISR, especialmente cerca de 100 Hz de onda. El DAC PA4 entrega una señal unipolar; la escala bipolar supone la etapa analógica externa indicada en el README. La FSM aún no informa underrun de DAC.
+No firmware was uploaded or board tested by the agent. Oscilloscope checks and MATH load measurements remain pending: sinf() per sample at 16 MHz may exceed the ISR budget, particularly near a 100 Hz waveform. PA4 is unipolar; bipolar scaling assumes the external analog stage described in README. The FSM still does not report DAC underrun.
 
-## Inventario exacto de cambios
+## Initial integration inventory
 
-- modificado: `.gitignore`
-- modificado: `.vscode/c_cpp_properties.json`
-- añadido: `docs/ARCHITECTURE.md`
-- modificado: `include/bsp/dac.h`
-- modificado: `include/config/board_config.h`
-- modificado: `include/config/generator_config.h`
-- modificado: `include/protocol/crc8.h`
-- modificado: `include/protocol/protocol.h`
-- modificado: `platformio.ini`
-- añadido: `README.md`
-- modificado: `src/app/parameter_manager.c`
-- modificado: `src/bsp/dac.c`
-- modificado: `src/bsp/sample_timer.c`
-- modificado: `src/bsp/scheduler_timer.c`
-- modificado: `src/bsp/system.c`
-- modificado: `src/bsp/wave_output.c`
-- modificado: `src/generator/generator.c`
-- modificado: `src/generator/generator_lut.c`
-- modificado: `src/generator/generator_math.c`
-- modificado: `src/protocol/cli.c`
-- modificado: `src/protocol/crc8.c`
-- modificado: `src/protocol/protocol.c`
-- añadido: `tests_host/run.ps1`
-- añadido: `tests_host/run.sh`
-- añadido: `tests_host/test_generators.c`
-- añadido: `docs/INTEGRACION.md` (este informe).
+Modified: .gitignore, the local .vscode/c_cpp_properties.json, include/bsp/dac.h, include/config/board_config.h, include/config/generator_config.h, include/protocol/crc8.h, include/protocol/protocol.h, platformio.ini, src/app/parameter_manager.c, src/bsp/dac.c, src/bsp/sample_timer.c, src/bsp/scheduler_timer.c, src/bsp/system.c, src/bsp/wave_output.c, src/generator/generator.c, src/generator/generator_lut.c, src/generator/generator_math.c, src/protocol/cli.c, src/protocol/crc8.c, and src/protocol/protocol.c.
+
+Added: README.md, docs/ARCHITECTURE.md, docs/INTEGRACION.md, tests_host/run.ps1, tests_host/run.sh, and tests_host/test_generators.c. The local .vscode configuration is excluded from Git.
+
+Additional technical guides and a validation issue template were added when preparing the GitHub repository. Their English translation changes documentation and tool messages only; firmware behavior remains unchanged.

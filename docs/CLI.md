@@ -1,25 +1,25 @@
-# Referencia de consola serie
+# Serial CLI reference
 
-115200 baudios, 8N1 y sin control de flujo. Finalizar cada comando con CR o LF. Comandos y tokens se convierten a mayúsculas; se admite notación exponencial en números. Usar punto decimal. La línea admite hasta 95 caracteres; una línea demasiado larga o con desbordamiento RX se descarta.
+Use 115200 baud, 8N1, and no flow control. Terminate each command with CR or LF. Commands and tokens are converted to uppercase; numeric exponent notation is accepted. Use a decimal point. A line can contain up to 95 characters; an overlong line or RX overflow causes the affected command to be discarded.
 
-| Comando | Efecto / condición |
+| Command | Effect / condition |
 |---|---|
-| HELP | Muestra ayuda |
-| STATUS | Estado, origen, fallo y parámetros solicitados |
-| START | Requiere IDLE; en REMOTE arranca; en LOCAL espera controles estables |
-| STOP | Detiene salida; RUNNING → IDLE; no borra FAULT |
-| RESET | Borra un FAULT y vuelve a IDLE |
-| SOURCE LOCAL | Selecciona potenciómetros y encoder; requiere IDLE |
-| SOURCE REMOTE | Selecciona control por consola; requiere IDLE |
-| MODE LUT / MODE MATH | Selecciona backend; requiere REMOTE e IDLE |
-| WAVE DC / SINE / TRIANGLE / SQUARE | Selecciona forma; requiere REMOTE e IDLE |
-| FREQ valor | 1–100 Hz; requiere REMOTE e IDLE |
-| AMP valor | 0–5 V de pico; requiere REMOTE e IDLE y margen de offset |
-| OFFSET valor | −5 a +5 V; requiere REMOTE e IDLE y margen de amplitud |
+| HELP | Print help |
+| STATUS | Print state, source, fault, and requested parameters |
+| START | Requires IDLE; starts immediately in REMOTE, waits for stable controls in LOCAL |
+| STOP | Stop output; RUNNING → IDLE; does not clear FAULT |
+| RESET | Clear FAULT and return to IDLE |
+| SOURCE LOCAL | Select potentiometers and encoder; requires IDLE |
+| SOURCE REMOTE | Select console control; requires IDLE |
+| MODE LUT / MODE MATH | Select backend; requires REMOTE and IDLE |
+| WAVE DC / SINE / TRIANGLE / SQUARE | Select waveform; requires REMOTE and IDLE |
+| FREQ value | 1–100 Hz; requires REMOTE and IDLE |
+| AMP value | 0–5 V peak; requires REMOTE, IDLE, and offset headroom |
+| OFFSET value | −5 to +5 V; requires REMOTE, IDLE, and amplitude headroom |
 
-Las tensiones representan la escala bipolar ideal de la etapa externa. Se exige `abs(offset) + amplitud <= 5`. AMP expresa pico, no pico a pico; para seno/triángulo/cuadrada, Vpp ideal = 2 × AMP. DC usa el offset; la validación de margen sigue aplicándose.
+Voltages represent the external stage's ideal bipolar scale. The required constraint is `abs(offset) + amplitude <= 5`. AMP specifies peak amplitude, not peak-to-peak; ideal Vpp = 2 × AMP for sine, triangle, and square waves. DC uses offset alone, but the same headroom validation still applies.
 
-## Sesión remota
+## Remote session
 
 ```text
 STOP
@@ -37,11 +37,11 @@ START
 STOP
 ```
 
-Probar físicamente MATH primero a baja frecuencia; el máximo configurado no confirma capacidad temporal.
+Begin hardware testing of MATH mode at a low frequency; the configured maximum does not establish its timing capability.
 
-## Cambiar offset sin un rechazo intermedio
+## Changing offset without an intermediate rejection
 
-Si la amplitud actual es 5 V, `OFFSET 3` se rechaza por falta de margen. Utilizar:
+If the current amplitude is 5 V, `OFFSET 3` is rejected because there is no headroom. Use:
 
 ```text
 STOP
@@ -52,7 +52,7 @@ AMP 1
 START
 ```
 
-## Control local
+## Local control
 
 ```text
 STOP
@@ -60,10 +60,10 @@ SOURCE LOCAL
 START
 ```
 
-El firmware vuelve a aprender los potenciómetros. Necesita tres observaciones cuantizadas estables, tomadas cada 50 ms; el filtrado puede aumentar el tiempo de asentamiento. El encoder selecciona DC → SINE → TRIANGLE → SQUARE cíclicamente. LOCAL arranca seleccionando SINE.
+Firmware relearns the potentiometer readings. It requires three matching quantized observations taken every 50 ms; filtering can extend settling time. The encoder cycles through DC → SINE → TRIANGLE → SQUARE. LOCAL starts with SINE selected.
 
-## Respuestas y diagnóstico
+## Responses and troubleshooting
 
-Los comandos de cambio aceptados responden `OK`; los rechazos responden `ERR: ...`. HELP y STATUS imprimen información. Los fallos de aplicación reportados son NONE, CONTROLS_READ, PARAMETER_UPDATE y GENERATOR_START.
+Accepted mutation commands return `OK`; rejected commands return `ERR: ...`. HELP and STATUS print information. Reported application faults are NONE, CONTROLS_READ, PARAMETER_UPDATE, and GENERATOR_START.
 
-Si aparece FAULT: ejecutar STATUS, corregir la causa, RESET y después configurar/START. STOP no borra fallos. STATUS muestra configuración y estado lógico; no mide tensión/frecuencia, ni informa actualmente un underrun del DAC.
+If FAULT appears, run STATUS, address the cause, run RESET, then configure and START again. STOP does not clear faults. STATUS reports requested settings and logical state; it does not measure voltage/frequency or currently report DAC underrun.

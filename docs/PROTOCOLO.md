@@ -1,30 +1,30 @@
-# Protocolo binario opcional
+# Optional binary protocol
 
-Protocol_Encode y Protocol_Decode son un codec independiente. **No hay receptor binario en la UART, parser de stream, mapa de comandos ni enlace con App.** El canal de control implementado es la CLI de texto.
+Protocol_Encode and Protocol_Decode implement a standalone codec. **There is no binary UART receiver, stream parser, command map, or connection to App.** The implemented control interface is the text CLI.
 
-## Trama
+## Frame layout
 
-| Posición | Campo |
+| Position | Field |
 |---|---|
 | 0 | SOF = 0xAA |
-| 1 | type, 1 byte |
-| 2 | command, 1 byte |
+| 1 | type, one byte |
+| 2 | command, one byte |
 | 3 | length, 0–32 bytes |
 | 4… | payload |
-| 4 + length | XOR de type, command, length y payload |
+| 4 + length | XOR of type, command, length, and payload |
 
-Tamaño total: `length + 5`, máximo 37 bytes. SOF no participa en el checksum. No hay escape de bytes: payload puede contener 0xAA. Decode espera una trama completa y de tamaño exacto.
+Total size is `length + 5`, at most 37 bytes. SOF is excluded from the checksum. No byte escaping is used: payload may contain 0xAA. Decode expects one complete frame of the exact specified size.
 
-Ejemplo para type=1, command=4 y payload=[2,3,5]:
+Example with type=1, command=4, and payload=[2,3,5]:
 
 ```text
 AA 01 04 03 02 03 05 02
 ```
 
-El último 02 resulta de `01 XOR 04 XOR 03 XOR 02 XOR 03 XOR 05`.
+The final 02 is `01 XOR 04 XOR 03 XOR 02 XOR 03 XOR 05`.
 
-El nombre CRC8 es heredado: el algoritmo implementado es XOR, **no un CRC polinómico** y no aporta autenticación. type y command son valores opacos para el codec; su semántica queda por definir.
+The CRC8 name is inherited: the implemented algorithm is XOR, **not a polynomial CRC**, and does not provide authentication. type and command are opaque values to the codec; their application semantics remain undefined.
 
-Encode comprueba punteros, tamaño del payload y capacidad de salida. Decode comprueba SOF, tamaño exacto, longitud máxima, capacidad destino y checksum. No utilizar las longitudes de salida si la función devuelve false. Los buffers de entrada y salida deben ser independientes para evitar solapamientos con memcpy.
+Encode checks pointers, payload length, and output capacity. Decode checks SOF, exact size, maximum length, destination capacity, and checksum. Do not use returned output lengths if the function returns false. Input and output buffers must be independent to avoid overlapping memcpy operations.
 
-La API está en include/protocol/protocol.h y el checksum en include/protocol/crc8.h. Las pruebas de host incluyen roundtrip, checksum alterado, trama vacía, tamaño máximo, truncamiento y capacidad insuficiente.
+The API is declared in include/protocol/protocol.h and the checksum in include/protocol/crc8.h. Host tests cover roundtrip encoding, altered checksum, empty frames, maximum payload, truncation, and insufficient capacity.

@@ -1,17 +1,17 @@
-# Arquitectura
+# Architecture
 
-## Flujo principal
+## Main execution flow
 
-`main()` inicializa System, GPIO, App y CLI. El bucle principal ejecuta `App_Run()` y `CLI_Run()` de forma cooperativa.
+`main()` initializes System, GPIO, App, and CLI. The main loop runs `App_Run()` and `CLI_Run()` cooperatively.
 
 ```mermaid
 flowchart TD
     Main[main] --> App[App / FSM]
     Main --> CLI[CLI]
     CLI --> App
-    CLI <--> UART[USART2 / buffer RX]
+    CLI <--> UART[USART2 / RX buffer]
     App --> Scheduler[Scheduler / TIM3]
-    Scheduler --> Controls[Controls / ADC y encoder]
+    Scheduler --> Controls[Controls / ADC and encoder]
     Controls --> PM[ParameterManager]
     PM --> Generator[Generator]
     App --> Generator
@@ -22,50 +22,50 @@ flowchart TD
     Output --> DAC[DAC1 / TIM6 / DMA1]
 ```
 
-## Responsabilidades
+## Module responsibilities
 
-| Módulo | Contrato |
+| Module | Contract |
 |---|---|
-| App | Coordina FSM, origen LOCAL/REMOTE y fallos de aplicación |
-| FSM | Valida transiciones; STOP no borra un FAULT |
-| Scheduler | Consulta ticks de TIM3 y ejecuta controles cada 50 ms en foreground; omite periodos atrasados |
-| Controls | Lee ADC de frecuencia/amplitud/offset y delta del encoder |
-| ParameterManager | Filtra, cuantiza, espera tres lecturas iguales y aplica una configuración estable |
-| Generator | API común de configuración, validación y selección de backend |
-| GeneratorLUT | Tablas constantes y buffer RAM privado; detiene salida antes de modificarlo |
-| GeneratorMath | Estado de fase y callback de cálculo de muestras |
-| WaveOutput | Coordina DAC, TIM6 y DMA; excluye DMA y generación por ISR |
-| CLI | Interpreta texto en foreground; USART2 IRQ solo captura recepción |
-| Protocol / CRC8 | Codec binario independiente, sin integración con CLI |
+| App | Coordinates the FSM, LOCAL/REMOTE ownership, and application faults |
+| FSM | Validates state transitions; STOP does not clear FAULT |
+| Scheduler | Reads TIM3 ticks and runs controls every 50 ms in foreground; skips missed periods |
+| Controls | Reads frequency/amplitude/offset ADC channels and encoder delta |
+| ParameterManager | Filters, quantizes, waits for three matching observations, then applies stable settings |
+| Generator | Provides shared configuration, validation, and backend selection |
+| GeneratorLUT | Owns constant tables and a private RAM buffer; stops output before modifying the buffer |
+| GeneratorMath | Owns phase state and the sample computation callback |
+| WaveOutput | Coordinates DAC, TIM6, and DMA; excludes simultaneous DMA and ISR generation |
+| CLI | Parses text in foreground; the USART2 IRQ only captures received data |
+| Protocol / CRC8 | Standalone binary codec, not integrated with the CLI |
 
-## Estados
+## States
 
 ```mermaid
 stateDiagram-v2
     [*] --> INIT
-    INIT --> IDLE: inicialización completa
-    IDLE --> RUNNING: START aceptado
+    INIT --> IDLE: initialization complete
+    IDLE --> RUNNING: START accepted
     RUNNING --> IDLE: STOP
-    INIT --> FAULT: fallo
-    IDLE --> FAULT: fallo
-    RUNNING --> FAULT: fallo
+    INIT --> FAULT: failure
+    IDLE --> FAULT: failure
+    RUNNING --> FAULT: failure
     FAULT --> IDLE: RESET
 ```
 
-En REMOTE, START inicia la generación configurada. En LOCAL, START arma la aplicación y las lecturas estables inician la señal posteriormente; RUNNING no demuestra por sí solo que el DAC ya esté generando. Cambiar SOURCE o editar parámetros remotos requiere IDLE. STOP deja un FAULT activo; RESET solo es válido en FAULT.
+In REMOTE mode, START begins generation with the configured settings. In LOCAL mode, START arms the application and stable readings start the waveform later; RUNNING alone does not prove the DAC is already generating. Changing SOURCE or editing remote parameters requires IDLE. STOP leaves FAULT active; RESET is only accepted in FAULT.
 
-## Muestreo y control
+## Sampling and controls
 
-- TIM6 usa un intervalo redondeado: `ticks = round(16 MHz / Fs)` y `ARR = ticks - 1`, con PSC = 0. La implementación acepta ticks de 2 a 65536.
-- Para LUT y MATH se solicita `Fs = round(frecuencia * 256)`. La frecuencia real depende del intervalo entero aceptado por TIM6.
-- LUT transfiere muestras de RAM al DAC mediante DMA1 Stream5 Channel7 en circular.
-- MATH usa TIM6 IRQ y un callback para preparar la siguiente muestra del DAC. Falta medir latencia y desfase inicial en banco.
-- TIM3 genera ticks de 10 ms. Los controles se consultan cada 5 ticks, sin ejecutar ADC ni lógica de aplicación dentro de TIM3 IRQ.
-- Los potenciómetros usan IIR con alfa 0.18 y cuantización de 1 Hz / 0.1 V. Tres lecturas estables reducen cambios por ruido; no garantizan inmunidad al ruido real.
-- El encoder selecciona DC, SINE, TRIANGLE y SQUARE, con cuatro cuentas por paso lógico.
+- TIM6 uses a rounded interval: `ticks = round(16 MHz / Fs)` and `ARR = ticks - 1`, with PSC = 0. The implementation accepts 2–65536 ticks.
+- Both backends request `Fs = round(frequency * 256)`. The actual waveform frequency depends on the integer interval accepted by TIM6.
+- LUT transfers samples from RAM to the DAC through DMA1 Stream5 Channel7 in circular mode.
+- MATH uses the TIM6 IRQ and a callback to prepare the next DAC sample. Latency and initial phase still require bench measurement.
+- TIM3 generates 10 ms ticks. Controls are polled every five ticks; ADC conversion and application logic do not run inside the TIM3 IRQ.
+- Potentiometer readings use an IIR filter with alpha 0.18 and quantization of 1 Hz / 0.1 V. Three stable readings reduce noise-induced changes; this does not establish immunity to real input noise.
+- The encoder cycles through DC, SINE, TRIANGLE, and SQUARE, using four counts per logical step.
 
-## Concurrencia
+## Concurrency
 
-Los parámetros y buffers se cambian en foreground tras detener la salida. TIM3 actualiza un contador volatile de 32 bits. USART2 implementa un buffer circular RX de 128 bytes con un espacio reservado. TIM6 llama al proveedor de muestras solo en MATH. Debe existir una sola definición de cada handler.
+Parameters and buffers are changed in foreground after stopping the output. TIM3 updates a volatile 32-bit tick counter. USART2 uses a 128-byte RX ring buffer with one reserved slot. TIM6 calls the sample provider only in MATH mode. Each interrupt handler must have exactly one definition.
 
-Prioridades configuradas: TIM6 = 5, TIM3 = 6 y USART2 = 7. El rendimiento y la pérdida de muestras requieren validación física; estas prioridades no constituyen evidencia de cumplimiento temporal.
+Configured interrupt priorities are TIM6 = 5, TIM3 = 6, and USART2 = 7. Timing and sample loss require hardware validation; these priorities do not demonstrate that real-time deadlines are met.

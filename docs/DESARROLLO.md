@@ -1,14 +1,14 @@
-# Desarrollo y pruebas
+# Development and testing
 
-## Entorno
+## Environment
 
-- PlatformIO Core o extensión PlatformIO IDE en VS Code.
-- Placa objetivo NUCLEO-F446RE; framework CMSIS y plataforma ststm32.
-- GCC nativo opcional para tests_host. El compilador ARM del firmware no genera ejecutables de host.
+- PlatformIO Core or the PlatformIO IDE extension for VS Code.
+- Target board: NUCLEO-F446RE, with the CMSIS framework and ststm32 platform.
+- Optional native GCC for tests_host. The ARM firmware compiler does not produce host executables.
 
-Abrir la carpeta que contiene platformio.ini. No incluir .pio ni archivos generados del IDE en commits. La versión de plataforma no está fijada en platformio.ini: registrar versiones al repetir una validación.
+Open the folder containing platformio.ini. Do not commit .pio or generated IDE files. The platform version is not pinned in platformio.ini; record tool versions when reproducing validation results.
 
-## Compilar, cargar y abrir consola
+## Build, upload, and serial console
 
 ```sh
 pio run -e nucleo_f446re
@@ -17,40 +17,40 @@ pio device list
 pio device monitor --baud 115200 --port COMx
 ```
 
-COMx es un ejemplo: reemplazarlo por el puerto real. Carga y monitor requieren hardware y están **pendientes de validación física**. Si pio no está en PATH, usar la terminal PlatformIO de VS Code. Para una reconstrucción limpia: `pio run -e nucleo_f446re -t clean` y después Build.
+COMx is a placeholder; replace it with the actual port. Upload and serial monitoring require hardware and remain **pending physical validation**. If pio is not on PATH, use the VS Code PlatformIO terminal. For a clean rebuild, run `pio run -e nucleo_f446re -t clean`, then Build.
 
-## Pruebas de host
+## Host tests
 
-Linux/macOS con compilador C y libm:
+Linux/macOS with a C compiler and libm:
 
 ```sh
 sh tests_host/run.sh
 ```
 
-Windows con GCC nativo:
+Windows with native GCC:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tests_host/run.ps1
-# O seleccionar explícitamente un GCC compatible:
-.	ests_hostun.ps1 -Compiler 'C:uta\gcc.exe'
+# Or select a compatible GCC explicitly:
+.\tests_host\run.ps1 -Compiler 'C:\path\to\gcc.exe'
 ```
 
-WaveOutput se sustituye por funciones simuladas. Las pruebas ejercitan tablas, muestras matemáticas, límites de parámetros, selección de backend y protocolo. No ejecutan periféricos, interrupciones reales, ADC, DMA ni comportamiento eléctrico; tampoco cubren todo el flujo App/CLI. Usan assert: no compilarlas con NDEBUG.
+WaveOutput is replaced with simulated functions. Tests exercise tables, mathematical samples, parameter limits, backend selection, and the protocol. They do not execute real peripherals, interrupts, ADC, DMA, or electrical behavior, and do not cover the entire App/CLI flow. They use assert; do not compile them with NDEBUG.
 
-**Estado:** suite preparada; no hay una ejecución satisfactoria confirmada todavía. La compilación del firmware sí fue confirmada por el propietario el 26 de octubre de 2026.
+**Status:** the suite is prepared, but a successful run has not yet been confirmed. Firmware compilation was confirmed by the owner on October 26, 2026.
 
-## Diagnóstico
+## Troubleshooting
 
-| Síntoma | Comprobación |
+| Symptom | Check |
 |---|---|
-| FREQ rechazado | Usar REMOTE e IDLE; valor finito entre 1 y 100 |
-| AMP/OFFSET rechazado | Revisar margen combinado; reducir AMP antes de mover OFFSET |
-| START rechazado | Revisar STATUS; detener o resolver y resetear FAULT |
-| Sin CLI | Revisar puerto, 115200 8N1, cable, VCP/puentes y masa |
-| Sin señal en LOCAL | Confirmar START y lecturas estables; revisar ADC y conexiones |
-| STATUS RUNNING sin señal real | El estado es lógico; medir DAC y revisar modo/hardware |
-| Error de arranque del compilador por DLL | Problema de herramientas/Windows, anterior a compilar el código; probar Build en el entorno PlatformIO funcional |
+| FREQ rejected | Select REMOTE and IDLE; use a finite value between 1 and 100 |
+| AMP/OFFSET rejected | Check combined headroom; reduce AMP before moving OFFSET |
+| START rejected | Check STATUS; stop, or resolve and reset FAULT |
+| No CLI response | Check port, 115200 8N1, cable, VCP routing/bridges, and ground |
+| No signal in LOCAL | Confirm START and stable readings; check ADC and wiring |
+| STATUS RUNNING without a measured waveform | State is logical; measure the DAC and check mode/hardware |
+| Compiler fails to start with a DLL error | This is a Windows/toolchain issue before source compilation; use the working PlatformIO environment |
 
-## Cambios futuros
+## Future changes
 
-Mantener los drivers de registros en BSP y las decisiones de aplicación en App. Detener salida antes de modificar buffers o parámetros compartidos con ISR/DMA. Evitar duplicar main y handlers. Actualizar documentación y pruebas al cambiar rangos, pines, protocolo o estados. Medir el coste temporal de MATH antes de ampliar frecuencias.
+Keep register-level drivers in BSP and application decisions in App. Stop output before modifying buffers or settings shared with ISR/DMA. Avoid duplicate main functions or interrupt handlers. Update documentation and tests when changing limits, pins, protocols, or states. Measure MATH execution time before increasing frequencies.
