@@ -11,5 +11,5 @@ __pycache__/
 *.bin
 *.map
 
-# Configuración local del editor
+# Local editor configuration
 .vscode/

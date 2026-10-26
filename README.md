@@ -1,36 +1,36 @@
 # Signal Generator V1 · STM32F446RE
 
-Generador de señales en **C11**, PlatformIO y CMSIS, con acceso directo a registros, sin HAL ni RTOS. Ofrece generación por LUT/DMA y cálculo de muestras en tiempo real, control local y consola serie.
+A signal generator written in **C11**, using PlatformIO and CMSIS with direct register access, without HAL or an RTOS. It provides LUT/DMA and real-time mathematical waveform generation, local controls, and a serial console.
 
-**Estado al 26 de octubre de 2026:** compilación completada y confirmada por el propietario. **Validación física pendiente**. La compilación no confirma frecuencia, amplitud, estabilidad ni calidad de señal. Las pruebas de host están incluidas; su ejecución todavía no está confirmada.
+**Status as of October 26, 2026:** firmware compilation completed and confirmed by the owner. **Physical hardware validation is pending.** A successful build does not verify frequency, amplitude, stability, or signal quality. Host tests are included, but a successful test run has not yet been confirmed.
 
-## Funciones
+## Features
 
-- Formas de onda DC, seno, triángulo y cuadrada.
-- Modo LUT: tablas precalculadas de 256 muestras y transferencia circular por DMA.
-- Modo MATH: evaluación de cada muestra desde la interrupción de TIM6.
-- Frecuencia configurada: 1–100 Hz; límite provisional, especialmente en MATH.
-- Amplitud de pico de 0–5 V y offset de −5 a +5 V, sujetos a `abs(offset) + amplitud <= 5 V`.
-- Control LOCAL por tres potenciómetros y encoder; control REMOTE mediante CLI.
-- FSM con estados INIT, IDLE, RUNNING y FAULT.
+- DC, sine, triangle, and square waveforms.
+- LUT mode: 256-sample precomputed tables with circular DMA transfer.
+- MATH mode: each sample is evaluated in the TIM6 interrupt handler.
+- Configurable waveform frequency: 1–100 Hz; a provisional limit, particularly for MATH mode.
+- Peak amplitude of 0–5 V and offset of −5 to +5 V, subject to `abs(offset) + amplitude <= 5 V`.
+- LOCAL control using three potentiometers and an encoder; REMOTE control through the CLI.
+- An application FSM with INIT, IDLE, RUNNING, and FAULT states.
 
-Las unidades bipolares describen la **salida ideal después de una etapa analógica externa calibrada**. PA4 es la salida unipolar del DAC, referida a VDDA; no entrega tensión negativa por sí sola.
+Bipolar voltage units describe the **ideal output after a calibrated external analog stage**. PA4 is the unipolar DAC output referenced to VDDA; it cannot produce a negative voltage by itself.
 
-## Compilar
+## Build
 
-Abre esta carpeta en PlatformIO (VS Code) y ejecuta Build, o utiliza:
+Open this folder in PlatformIO IDE for VS Code and select Build, or run:
 
 ```sh
 pio run -e nucleo_f446re
 ```
 
-La configuración utiliza `board = nucleo_f446re`, `framework = cmsis` y `platform = ststm32`. El firmware configura HSI a **16 MHz**, aunque la placa admita una frecuencia máxima mayor. No se requieren librerías de aplicación externas.
+The configuration uses `board = nucleo_f446re`, `framework = cmsis`, and `platform = ststm32`. The firmware configures the HSI clock at **16 MHz**, even though the board supports higher clock rates. No external application libraries are required.
 
-Consulta [desarrollo y pruebas](docs/DESARROLLO.md) para instalación, carga, monitor serie y pruebas de host.
+See the [development and testing guide](docs/DESARROLLO.md) for setup, upload, serial monitoring, and host tests.
 
-## Ejemplo de consola
+## Serial console example
 
-Puerto serie a **115200, 8N1**, sin control de flujo. Comandos terminados con CR o LF:
+Use **115200 baud, 8N1**, with no flow control. Terminate commands with CR or LF:
 
 ```text
 STATUS
@@ -45,44 +45,46 @@ STATUS
 STOP
 ```
 
-La salida esperada ideal del ejemplo es una senoide de 10 Hz, 2 V de pico y offset de 1 V, después de la etapa analógica. **No es una medición realizada.**
+The ideal expected output is a 10 Hz sine wave with a 2 V peak amplitude and a 1 V offset, after the analog stage. **This is an expected configuration, not a recorded measurement.**
 
-Los parámetros remotos se editan en IDLE. Antes de cambiar amplitud u offset a valores incompatibles con la configuración actual, reduce primero la amplitud. Más detalles en la [referencia CLI](docs/CLI.md).
+Remote parameters can only be changed in IDLE. Before applying amplitude or offset values that conflict with the current configuration, reduce the amplitude first. See the [CLI reference](docs/CLI.md).
 
-## Documentación
+## Documentation
 
-| Documento | Contenido |
+| Document | Contents |
 |---|---|
-| [Arquitectura](docs/ARCHITECTURE.md) | Módulos, flujo, interrupciones y FSM |
-| [Conexiones](docs/HARDWARE.md) | Pines, reloj y escala analógica |
-| [CLI](docs/CLI.md) | Comandos, estados, ejemplos y errores |
-| [Protocolo binario](docs/PROTOCOLO.md) | Tramas opcionales y checksum XOR |
-| [Desarrollo](docs/DESARROLLO.md) | Build, carga, pruebas y diagnóstico |
-| [Validación física pendiente](docs/VALIDACION.md) | Plan de banco y registro de resultados |
-| [Historial de integración](docs/INTEGRACION.md) | Cambios y correcciones iniciales |
-| [Changelog](CHANGELOG.md) | Evolución documentada |
+| [Architecture](docs/ARCHITECTURE.md) | Modules, data flow, interrupts, and FSM |
+| [Hardware connections](docs/HARDWARE.md) | Pin assignments, clocks, and analog scaling |
+| [CLI reference](docs/CLI.md) | Commands, states, examples, and errors |
+| [Binary protocol](docs/PROTOCOLO.md) | Optional frames and XOR checksum |
+| [Development](docs/DESARROLLO.md) | Build, upload, tests, and troubleshooting |
+| [Pending hardware validation](docs/VALIDACION.md) | Bench test plan and measurement records |
+| [Integration history](docs/INTEGRACION.md) | Initial changes and fixes |
+| [Changelog](CHANGELOG.md) | Documented project history |
 
-## Estructura
+Existing documentation filenames are retained to preserve links; all document contents are in English.
+
+## Project structure
 
 ```text
-include/       Interfaces y configuración
-src/app/       FSM, scheduler, controles y parámetros
-src/bsp/       Drivers de periféricos por registros
-src/generator/ LUT, MATH y formas de onda
-src/protocol/  CLI y protocolo binario opcional
-src/utils/     Filtrado y mapeo
-tests_host/    Pruebas con WaveOutput simulado
-docs/          Documentación técnica y plan de validación
-platformio.ini Configuración de compilación
+include/       Public interfaces and configuration
+src/app/       FSM, scheduler, controls, and parameter management
+src/bsp/       Register-level peripheral drivers
+src/generator/ LUT, MATH, and waveform evaluation
+src/protocol/  CLI and optional binary protocol
+src/utils/     Filtering and mapping
+tests_host/    Tests with simulated WaveOutput functions
+docs/          Technical documentation and validation plan
+platformio.ini Build configuration
 ```
 
-## Limitaciones conocidas
+## Known limitations
 
-- MATH ejecuta `sinf()` en la ISR: a 100 Hz y 256 muestras/ciclo solicita 25.6 kHz de muestreo. Falta medir si cumple el presupuesto de tiempo a 16 MHz. Comenzar las pruebas de banco con 1–10 Hz.
-- Los cambios de parámetros detienen y reinician la salida; puede haber discontinuidades. No hay doble buffer.
-- El underrun del DAC se limpia al detener; no se comunica a la FSM ni se refleja necesariamente en STATUS.
-- Las frecuencias reales están cuantizadas por el temporizador; STATUS muestra la frecuencia solicitada.
-- El protocolo binario no está conectado a la UART ni a la CLI.
-- No hay resultados físicos de precisión, THD, carga, calibración o tensión de salida.
+- MATH calls `sinf()` in the ISR. At 100 Hz and 256 samples per cycle, the requested sample rate is 25.6 kHz. Whether this fits the ISR time budget at 16 MHz still needs measurement. Start bench testing at 1–10 Hz.
+- Parameter changes stop and restart the output, which may introduce discontinuities. Double buffering is not implemented.
+- DAC underrun is cleared when stopping, but is not reported to the FSM or necessarily reflected in STATUS.
+- Actual frequencies are quantized by the timer; STATUS reports the requested frequency.
+- The binary protocol is not connected to the UART or CLI.
+- No physical measurements of accuracy, THD, output loading, calibration, or output voltage are available.
 
-No se ha elegido una licencia de distribución para este repositorio.
+A distribution license has not yet been selected for this repository.

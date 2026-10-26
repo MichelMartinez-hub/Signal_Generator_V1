@@ -1,27 +1,34 @@
-# Historial de cambios
+# Changelog
 
-## 2026-10-26 — Integración inicial y documentación
+## 2026-10-26 — English documentation
 
-### Integrado
+- Translated README, technical guides, integration history, changelog, validation issue template, and host-test messages into English.
+- Updated the repository description to English.
+- Preserved existing documentation paths and firmware behavior.
+- Firmware build remains owner-confirmed; physical hardware validation remains pending.
 
-- Codec binario opcional y checksum XOR antes vacíos.
-- Mejoras de DAC, TIM6, coordinación WaveOutput, reloj y temporizador del scheduler.
-- Tests de host para LUT/MATH y protocolo; ejecutor PowerShell y casos de límites.
-- Guías de hardware, arquitectura, CLI, protocolo, desarrollo y plan de validación física.
+## 2026-10-26 — Initial integration and documentation
 
-### Corregido
+### Added
 
-- Uso de NULL sin incluir stddef.h en generator.c.
-- Límites inconsistentes de frecuencia: 1–100 Hz en CLI, controles, API y backends.
-- Frecuencia inicial reducida a 10 Hz.
-- Reinicio de contador y redondeo de TIM6; admisión del intervalo de 65536 ticks.
-- Inicialización y limpieza de underrun del DAC.
-- Consistencia entre reloj real configurado, divisores y SystemCoreClock.
+- Previously empty optional binary codec and XOR checksum modules.
+- DAC, TIM6, WaveOutput coordination, clock, and scheduler timer improvements.
+- LUT/MATH and protocol host tests, a PowerShell runner, and boundary cases.
+- Hardware, architecture, CLI, protocol, development, and hardware-validation guides.
 
-### Estado
+### Fixed
 
-- Compilación confirmada por el propietario.
-- Pruebas de host: ejecución satisfactoria todavía sin confirmar.
-- Validación física: pendiente.
+- Use of NULL without including stddef.h in generator.c.
+- Inconsistent frequency limits: unified to 1–100 Hz in the CLI, controls, API, and both backends.
+- Initial frequency reduced to 10 Hz.
+- TIM6 counter reset, interval rounding, and support for the 65536-tick interval.
+- DAC initialization and underrun clearing.
+- Consistency between the configured clock, bus dividers, and SystemCoreClock.
 
-El detalle de la integración está en docs/INTEGRACION.md. No se ha publicado una versión de firmware validada físicamente.
+### Validation status
+
+- Firmware build confirmed by the owner.
+- Host tests: a successful run has not yet been confirmed.
+- Physical hardware validation: pending.
+
+See docs/INTEGRACION.md for integration details. No physically validated firmware release has been published.
