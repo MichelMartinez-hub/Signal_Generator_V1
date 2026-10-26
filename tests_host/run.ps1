@@ -14,6 +14,6 @@ $sources = @(
 ) | ForEach-Object { Join-Path $projectRoot $_ }
 $executable = Join-Path $buildDirectory 'test_generators.exe'
 & $Compiler -std=c11 -Wall -Wextra -Werror "-I$projectRoot/include" @sources -lm -o $executable
-if ($LASTEXITCODE -ne 0) { throw 'Falló la compilación de pruebas.' }
+if ($LASTEXITCODE -ne 0) { throw 'Host-test compilation failed.' }
 & $executable
-if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas.' }
+if ($LASTEXITCODE -ne 0) { throw 'Host tests failed.' }
