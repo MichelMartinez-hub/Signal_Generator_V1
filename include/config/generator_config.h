@@ -1,18 +1,17 @@
 #ifndef GENERATOR_CONFIG_H
 #define GENERATOR_CONFIG_H
 
-/* Initial generator limits */
+#define GENERATOR_MIN_FREQUENCY_HZ 1.0f
+#define GENERATOR_MAX_FREQUENCY_HZ 50000.0f
 
-#define GENERATOR_MIN_FREQUENCY_HZ      1.0f
-#define GENERATOR_MAX_FREQUENCY_HZ  100.0f
-
-#define GENERATOR_MIN_AMPLITUDE_V        0.0f
-#define GENERATOR_MAX_AMPLITUDE_V        5.0f
-
-#define GENERATOR_MIN_OFFSET_V          -5.0f
-#define GENERATOR_MAX_OFFSET_V           5.0f
-
-#define GENERATOR_OUTPUT_MIN_V          -5.0f
-#define GENERATOR_OUTPUT_MAX_V           5.0f
+#define GENERATOR_MIN_AMPLITUDE_V  0.0f
+#define GENERATOR_MAX_AMPLITUDE_V  5.0f
+#define GENERATOR_MIN_OFFSET_V    -5.0f
+#define GENERATOR_MAX_OFFSET_V     5.0f
+#define GENERATOR_OUTPUT_MIN_V    -5.0f
+#define GENERATOR_OUTPUT_MAX_V     5.0f
+/* Compatibility with the initial consolidated snapshot. */
+#define GENERATOR_MIN_OUTPUT_V GENERATOR_OUTPUT_MIN_V
+#define GENERATOR_MAX_OUTPUT_V GENERATOR_OUTPUT_MAX_V
 
 #endif /* GENERATOR_CONFIG_H */
