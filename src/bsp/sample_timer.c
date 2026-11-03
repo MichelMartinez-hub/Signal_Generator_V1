@@ -22,19 +22,31 @@ void SampleTimer_Init(void)
 
 bool SampleTimer_Set(uint32_t sampleFrequency_hz)
 {
-    if (sampleFrequency_hz == 0U) return false;
-    /* Round nearest timer interval, with 16-bit ARR+1 in [1, 65536]. */
-    const uint32_t ticks = (uint32_t)(
-        ((uint64_t)APB1_TIMER_CLOCK_HZ + sampleFrequency_hz / 2U) /
-        sampleFrequency_hz);
-    if (ticks < 2U || ticks > 65536U) return false;
-    TIM6->PSC = 0U;
-    TIM6->ARR = ticks - 1U;
+    if (sampleFrequency_hz == 0U ||
+        (TIM6->CR1 & TIM_CR1_CEN) != 0U) return false;
+
+    /* Select 16-bit prescaler and reload; supports Fs as low as 1 Hz. */
+    const uint64_t total_ticks =
+        ((uint64_t)APB1_TIMER_CLOCK_HZ + (sampleFrequency_hz / 2U)) /
+        sampleFrequency_hz;
+    if (total_ticks < 2U || total_ticks > (65536ULL * 65536ULL))
+        return false;
+
+    const uint64_t psc_div = (total_ticks + 65535ULL) / 65536ULL;
+    if (psc_div == 0U || psc_div > 65536U) return false;
+    const uint64_t arr_div = (total_ticks + (psc_div / 2U)) / psc_div;
+    if (arr_div < 2U || arr_div > 65536U) return false;
+
+    TIM6->PSC = (uint32_t)(psc_div - 1U);
+    TIM6->ARR = (uint32_t)(arr_div - 1U);
     TIM6->CNT = 0U;
+    /* UG can drive TRGO: caller must have disabled DAC trigger first. */
     TIM6->EGR = TIM_EGR_UG;
     TIM6->SR &= ~TIM_SR_UIF;
+    NVIC_ClearPendingIRQ(TIM6_DAC_IRQn);
     return true;
 }
+
 void SampleTimer_Start(void) { TIM6->CR1 |= TIM_CR1_CEN; }
 void SampleTimer_Stop(void)  { TIM6->CR1 &= ~TIM_CR1_CEN; }
 void SampleTimer_SetUpdateCallback(SampleTimer_Callback cb)
@@ -64,5 +76,4 @@ void TIM6_DAC_IRQHandler(void)
         TIM6->SR &= ~TIM_SR_UIF;
         if (update_callback != NULL) update_callback();
     }
-    /* DAC DMA underrun interrupt remains disabled in this version. */
 }
