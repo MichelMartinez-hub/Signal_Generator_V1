@@ -1,6 +1,6 @@
 # Signal Generator V1 · STM32F446RE
 
-The current firmware targets up to 50 kHz through the remote CLI. Local frequency control spans 1–100 Hz. Both waveform backends use DMA and an adaptive sample plan. Physical validation and confirmation of the patched ARM build are pending.
+The current firmware targets up to 50 kHz through the remote CLI. The PC0 potentiometer covers the same 1 Hz–50 kHz range. Both waveform backends use DMA and an adaptive sample plan. The NUCLEO-F446RE firmware build and native host tests passed on November 2, 2026. Physical validation remains pending.
 
 See [50 kHz patch and bench procedure](README_PATCH_50KHZ.md) for the current clock, sampling plan, build commands and test sequence. The guides below document the original 100 Hz baseline where their clock, rate or backend details differ.
 
