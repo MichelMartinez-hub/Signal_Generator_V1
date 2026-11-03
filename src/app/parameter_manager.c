@@ -2,17 +2,17 @@
 #include "generator/generator.h"
 #include "utils/filter.h"
 #include "utils/map.h"
+#include "config/generator_config.h"
 
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Provisional control range; benchmark the MATH ISR before increasing it. */
 #define PM_ADC_MAX            4095U
-#define PM_FREQUENCY_MIN_HZ    1.0f
-#define PM_FREQUENCY_MAX_HZ  100.0f
-#define PM_FREQUENCY_STEP_HZ   1.0f
+#define PM_FREQ_FILTER_ALPHA  0.65f
+#define PM_FREQ_DEADBAND      5U
 #define PM_AMPLITUDE_STEP_V    0.1f
 #define PM_OFFSET_STEP_V       0.1f
 #define PM_MAX_PEAK_V          5.0f
@@ -76,21 +76,51 @@ static void ParameterManager_AdvanceWaveform(int32_t delta)
     selected_waveform_index = (uint8_t)((next + 4) % 4);
 }
 
+/* Interpolate between decade anchors. All changes happen in foreground. */
+static float FrequencyFromCode(uint16_t code)
+{
+    static const float hz[] = { GENERATOR_MIN_FREQUENCY_HZ, 10.0f, 100.0f,
+                                1000.0f, 10000.0f, GENERATOR_MAX_FREQUENCY_HZ };
+    if (code >= PM_ADC_MAX) return GENERATOR_MAX_FREQUENCY_HZ;
+    const unsigned segment = code / 819U;
+    const float fraction = (float)(code % 819U) / 819.0f;
+    const float value = hz[segment] + fraction * (hz[segment + 1U] - hz[segment]);
+    static const float step[] = { 1.0f, 1.0f, 10.0f, 100.0f, 250.0f };
+    return Map_Quantize(value, step[segment]);
+}
+
+/* Latch a filtered ADC position. Snap the rails so filter settling and
+   the deadband cannot prevent selecting either endpoint. */
+static uint16_t frequency_anchor;
+static bool frequency_anchor_valid;
+
+static float LocalFrequency(float filtered)
+{
+    uint16_t code = (uint16_t)fminf(filtered + 0.5f, (float)PM_ADC_MAX);
+    if (code <= 1U) code = 0U;
+    if (code >= PM_ADC_MAX - 1U) code = PM_ADC_MAX;
+
+    if (!frequency_anchor_valid || code == 0U || code == PM_ADC_MAX ||
+        abs((int)code - (int)frequency_anchor) >= (int)PM_FREQ_DEADBAND)
+    {
+        frequency_anchor = code;
+        frequency_anchor_valid = true;
+    }
+    return FrequencyFromCode(frequency_anchor);
+}
+
 static ParameterManager_Settings_t ParameterManager_FromRaw(
     const ControlsRaw_t *raw)
 {
     const float raw_freq = FilterIIR_Update(
-        &frequency_filter, (float)raw->frequency_adc, PM_FILTER_ALPHA);
+        &frequency_filter, (float)raw->frequency_adc, PM_FREQ_FILTER_ALPHA);
     const float raw_amp = FilterIIR_Update(
         &amplitude_filter, (float)raw->amplitude_adc, PM_FILTER_ALPHA);
     const float raw_offset = FilterIIR_Update(
         &offset_filter, (float)raw->offset_adc, PM_FILTER_ALPHA);
 
     ParameterManager_Settings_t settings;
-    settings.frequency_hz = Map_Quantize(
-        Map_LinearU16((uint16_t)raw_freq, PM_ADC_MAX,
-                      PM_FREQUENCY_MIN_HZ, PM_FREQUENCY_MAX_HZ),
-        PM_FREQUENCY_STEP_HZ);
+    settings.frequency_hz = LocalFrequency(raw_freq);
 
     settings.offset_v = Map_Quantize(
         Map_LinearU16((uint16_t)raw_offset, PM_ADC_MAX,
@@ -132,6 +162,7 @@ static bool ParameterManager_Apply(const ParameterManager_Settings_t *settings)
 
 void ParameterManager_Init(void)
 {
+    frequency_anchor_valid = false;
     FilterIIR_Reset(&frequency_filter);
     FilterIIR_Reset(&amplitude_filter);
     FilterIIR_Reset(&offset_filter);
