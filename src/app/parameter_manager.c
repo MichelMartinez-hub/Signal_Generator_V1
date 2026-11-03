@@ -2,7 +2,6 @@
 #include "generator/generator.h"
 #include "utils/filter.h"
 #include "utils/map.h"
-#include "config/generator_config.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -11,8 +10,8 @@
 
 /* Provisional control range; benchmark the MATH ISR before increasing it. */
 #define PM_ADC_MAX            4095U
-#define PM_FREQUENCY_MIN_HZ    GENERATOR_MIN_FREQUENCY_HZ
-#define PM_FREQUENCY_MAX_HZ    GENERATOR_MAX_FREQUENCY_HZ
+#define PM_FREQUENCY_MIN_HZ    1.0f
+#define PM_FREQUENCY_MAX_HZ  100.0f
 #define PM_FREQUENCY_STEP_HZ   1.0f
 #define PM_AMPLITUDE_STEP_V    0.1f
 #define PM_OFFSET_STEP_V       0.1f
