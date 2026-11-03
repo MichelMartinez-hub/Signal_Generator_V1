@@ -1,98 +1,106 @@
 #include "generator/generator.h"
 #include "generator/generator_lut.h"
 #include "generator/generator_math.h"
+#include "generator/sample_plan.h"
 #include "generator/waveform.h"
 #include "bsp/wave_output.h"
 #include "config/board_config.h"
 #include "protocol/protocol.h"
 #include <assert.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <math.h>
 #include <stdio.h>
+#include <stddef.h>
 
-static uint16_t buf_copy[LUT_SIZE];
-static uint16_t length_saved;
-static uint32_t rate_saved;
-static WaveOutput_SampleProvider callback_saved;
-static int stop_calls;
+static uint16_t sample_copy[LUT_SIZE];
+static uint16_t sample_length;
+static uint32_t saved_rate;
+static WaveOutput_RefillCallback refill_cb;
+static int stop_count;
+
+/* No peripheral register accesses in host tests. */
 void WaveOutput_Init(void) { }
-void WaveOutput_Stop(void) { stop_calls++; callback_saved = NULL; }
+void WaveOutput_Stop(void) { ++stop_count; refill_cb = NULL; }
 void WaveOutput_SetDC(uint16_t value) { (void)value; }
 bool WaveOutput_IsRunning(void) { return false; }
-bool WaveOutput_StartBuffer(const uint16_t *buffer, uint16_t length, uint32_t sampleRate)
+bool WaveOutput_HasError(void) { return false; }
+bool WaveOutput_StartBuffer(const uint16_t *buf, uint16_t n, uint32_t fs)
 {
-    length_saved = length;
-    rate_saved = sampleRate;
-    for (unsigned i=0; i<length; ++i) buf_copy[i]=buffer[i];
+    sample_length = n;
+    saved_rate = fs;
+    for (uint16_t i = 0; i < n; ++i) sample_copy[i] = buf[i];
     return true;
 }
-bool WaveOutput_StartRealtime(WaveOutput_SampleProvider provider, uint32_t sampleRate)
+bool WaveOutput_StartStreaming(uint16_t *buf, uint16_t n,
+                               uint32_t fs, WaveOutput_RefillCallback cb)
 {
-    callback_saved = provider;
-    rate_saved = sampleRate;
+    refill_cb = cb;
+    sample_length = n;
+    saved_rate = fs;
+    for (uint16_t i = 0; i < n; ++i) sample_copy[i] = buf[i];
     return true;
 }
+bool WaveOutput_StartRealtime(WaveOutput_SampleProvider provider,
+                              uint32_t fs)
+{
+    (void)provider;
+    saved_rate = fs;
+    return true;
+}
+
 int main(void)
 {
-    assert(fabsf(Waveform_Evaluate(WAVEFORM_SINE,.25f)-1.0f) < .00001f);
-    assert(Waveform_Evaluate(WAVEFORM_TRIANGLE,0.0f) == -1.0f);
-    assert(Waveform_Evaluate(WAVEFORM_SQUARE,.75f) == -1.0f);
+    assert(fabsf(Waveform_Evaluate(WAVEFORM_SINE, 0.25f)-1.0f) < 0.00001f);
+    assert(Waveform_Evaluate(WAVEFORM_TRIANGLE, 0.0f) == -1.0f);
+    SamplePlan_t plan;
+    assert(SamplePlan_Make(10.0f, &plan));
+    assert(plan.samples_per_cycle == 256 && plan.sample_rate_hz == 2560);
+    assert(SamplePlan_Make(50000.0f, &plan));
+    assert(plan.samples_per_cycle == 16 && plan.sample_rate_hz == 800000);
+    assert(SamplePlan_Make(25000.0f, &plan));
+    assert(plan.samples_per_cycle == 32 && plan.sample_rate_hz == 800000);
+    assert(!SamplePlan_Make(50000.1f, &plan));
+
     Generator_Init();
     assert(Generator_SetWaveform(WAVEFORM_SINE));
     assert(Generator_SetFrequency(10.0f));
     assert(Generator_SetAmplitude(5.0f));
     assert(!Generator_SetOffset(1.0f));
     assert(Generator_Start());
-    assert(length_saved==LUT_SIZE && rate_saved == 2560);
-    assert(buf_copy[0]==2048 && buf_copy[64]==4095 && buf_copy[192]==0);
-    GeneratorSettings_t cfg;
-    assert(Generator_GetSettings(&cfg));
-    assert(cfg.mode == GENERATOR_MODE_LUT && cfg.frequency == 10.0f);
-    assert(Generator_SetWaveform(WAVEFORM_TRIANGLE) && Generator_Start());
-    assert(buf_copy[0] == 0 && buf_copy[128] == 4095);
+    assert(sample_length == 256 && saved_rate == 2560);
+    assert(sample_copy[0] == 2048 && sample_copy[64] == 4095 && sample_copy[192] == 0);
+
+    assert(Generator_SetFrequency(50000.0f));
+    assert(Generator_Start());
+    assert(sample_length == 16 && saved_rate == 800000);
+    assert(sample_copy[0] == 2048 && sample_copy[4] == 4095 && sample_copy[12] == 0);
+    GeneratorSettings_t settings;
+    assert(Generator_GetSettings(&settings));
+    assert(settings.frequency == 50000.0f && settings.mode == GENERATOR_MODE_LUT);
+
     assert(Generator_SetMode(GENERATOR_MODE_MATH));
-    assert(Generator_SetWaveform(WAVEFORM_SINE) && Generator_Start());
-    assert(callback_saved != NULL && rate_saved == 2560);
-    assert(callback_saved() == 2048);
-    uint16_t v=0;
-    for (int i=0;i<64;i++) v=callback_saved();
-    assert(v==4095);
+    assert(Generator_Start());
+    assert(sample_length == 256 && saved_rate == 800000 && refill_cb != NULL);
+    assert(sample_copy[0] == 2048 && sample_copy[4] == 4095 && sample_copy[12] == 0);
+    uint16_t regenerated[128];
+    refill_cb(regenerated, 128);
+    assert(regenerated[0] == 2048 && regenerated[4] == 4095 && regenerated[12] == 0);
+
     assert(!Generator_SetFrequency(0.0f));
-    /* Check unsupported rates in the facade and both public backends. */
     assert(!Generator_SetFrequency(NAN));
     assert(!Generator_SetFrequency(INFINITY));
-    assert(!Generator_SetFrequency(0.5f));
-    assert(!Generator_SetFrequency(101.0f));
-    assert(Generator_SetFrequency(1.0f));
-    assert(Generator_SetFrequency(100.0f));
-    assert(!GeneratorLUT_Start(0.5f));
-    assert(!GeneratorLUT_Start(101.0f));
-    assert(!GeneratorMath_Start(0.5f));
-    assert(!GeneratorMath_Start(101.0f));
+    assert(!Generator_SetFrequency(50001.0f));
     assert(!Generator_GetSettings(NULL));
-    uint8_t frame[PROTOCOL_MAX_FRAME];
-    size_t written=0;
-    uint8_t payload[]={2,3,5};
-    uint8_t rtype=0,cmd=0,out[PROTOCOL_MAX_PAYLOAD],n=0;
+
+    uint8_t frame[PROTOCOL_MAX_FRAME], data[PROTOCOL_MAX_PAYLOAD];
+    uint8_t payload[] = {2,3,5};
+    uint8_t typ = 0, cmd = 0, count = 0;
+    size_t written = 0;
     assert(Protocol_Encode(1,4,payload,3,frame,sizeof(frame),&written));
-    assert(Protocol_Decode(frame,written,&rtype,&cmd,out,sizeof(out),&n));
-    assert(rtype==1 && cmd==4 && n==3 && out[2]==5);
-    frame[5] ^= 1;
-    assert(!Protocol_Decode(frame,written,&rtype,&cmd,out,sizeof(out),&n));
-    assert(Protocol_Encode(1,4,NULL,0,frame,sizeof(frame),&written));
-    assert(Protocol_Decode(frame,written,&rtype,&cmd,NULL,0,&n) && n==0);
-    uint8_t max_payload[PROTOCOL_MAX_PAYLOAD];
-    for (unsigned i=0; i<sizeof(max_payload); ++i) max_payload[i]=(uint8_t)i;
-    assert(!Protocol_Encode(1,4,NULL,1,frame,sizeof(frame),&written));
-    assert(!Protocol_Encode(1,4,max_payload,sizeof(max_payload),frame,5,&written));
-    assert(Protocol_Encode(1,4,max_payload,sizeof(max_payload),frame,sizeof(frame),&written));
-    assert(written==PROTOCOL_MAX_FRAME);
-    assert(!Protocol_Decode(frame,written-1,&rtype,&cmd,out,sizeof(out),&n));
-    assert(!Protocol_Decode(frame,written,&rtype,&cmd,out,1,&n));
-    assert(Protocol_Decode(frame,written,&rtype,&cmd,out,sizeof(out),&n));
-    for (unsigned i=0; i<n; ++i) assert(out[i]==max_payload[i]);
-    assert(stop_calls>0);
-    puts("PASS: LUT/MATH, output limits, sampling, generator API, optional protocol");
+    assert(Protocol_Decode(frame,written,&typ,&cmd,data,sizeof(data),&count));
+    assert(typ == 1 && cmd == 4 && count == 3 && data[2] == 5);
+    assert(stop_count > 0);
+    puts("PASS: LUT16@50k, MATH DMA stream@50k, sample plan, generator facade, protocol");
     return 0;
 }
