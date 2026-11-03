@@ -1,225 +1,146 @@
 #include "generator/generator_math.h"
-#include "generator/waveform.h"
+#include "generator/sample_plan.h"
 #include "config/board_config.h"
 #include "bsp/wave_output.h"
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "config/generator_config.h"
 #include <math.h>
+#include <stdbool.h>
+#include <stdint.h>
 
-#if LUT_SIZE == 0U || LUT_SIZE > 65535U
-#error "Invalid sample count for mathematical generator"
+#if (MATH_DMA_BUFFER_SIZE != 256U)
+#error "This implementation uses a 256-sample DMA buffer"
 #endif
 
-#define OUTPUT_MIN_VOLTAGE (-5.0f)
-#define OUTPUT_MAX_VOLTAGE (5.0f)
-#define DAC_MAX_VALUE      (4095.0f)
-#define OUTPUT_RANGE       (10.0f)
+#define OUTPUT_MIN_V (-5.0f)
+#define OUTPUT_MAX_V ( 5.0f)
+#define PI2          (6.2831853071795864769f)
 
-// Private generator configuration
-static Waveform_t current_waveform = WAVEFORM_DC;
-static float current_amplitude = 0.0f;
-static float current_offset = 0.0f;
+static Waveform_t waveform = WAVEFORM_DC;
+static float amplitude = 0.0f;
+static float offset = 0.0f;
+static bool configured = false;
 
-// Private generation state
-static uint16_t sample_index = 0U;
-static bool math_configured = false;
+/* All mutable sample state is private to the math engine. */
+static uint16_t samples_per_cycle = LUT_SIZE;
+static uint16_t phase_index = 0U;
+static float previous = 0.0f;
+static float current = 0.0f;
+static float sine_coefficient = 0.0f;
+static float sine_first = 0.0f;
+static uint16_t dma_buffer[MATH_DMA_BUFFER_SIZE];
 
-
-// --------------------------------------------------
-// Validate waveform type
-// --------------------------------------------------
-
-static bool GeneratorMath_ValidWaveform(Waveform_t waveform)
+static bool ValidWaveform(Waveform_t w)
 {
+    return w == WAVEFORM_DC || w == WAVEFORM_SINE ||
+           w == WAVEFORM_TRIANGLE || w == WAVEFORM_SQUARE;
+}
+
+static uint16_t VoltageToDAC(float voltage)
+{
+    if (voltage <= OUTPUT_MIN_V) return 0U;
+    if (voltage >= OUTPUT_MAX_V) return 4095U;
+    return (uint16_t)((voltage + 5.0f) * 409.5f + 0.5f);
+}
+
+/* Numerical sine oscillator: y[n+1] = 2cos(w)*y[n] - y[n-1].
+ * Reset at each whole cycle to prevent cumulative roundoff drift.
+ * sinf/cosf are used only at START, never inside a DMA IRQ.
+ */
+static float NextNormalized(void)
+{
+    float value;
+    const uint16_t i = phase_index;
     switch (waveform)
     {
-        case WAVEFORM_DC:
         case WAVEFORM_SINE:
+            if (i == 0U)
+            {
+                previous = -sine_first;
+                current = 0.0f;
+                value = 0.0f;
+            }
+            else
+            {
+                const float next = sine_coefficient * current - previous;
+                previous = current;
+                current = next;
+                value = next;
+            }
+            break;
         case WAVEFORM_TRIANGLE:
+            if (i < samples_per_cycle / 2U)
+                value = (4.0f * (float)i / (float)samples_per_cycle) - 1.0f;
+            else
+                value = 3.0f - (4.0f * (float)i / (float)samples_per_cycle);
+            break;
         case WAVEFORM_SQUARE:
-            return true;
-
+            value = i < samples_per_cycle / 2U ? 1.0f : -1.0f;
+            break;
         default:
-            return false;
+            value = 0.0f;
+            break;
     }
+    ++phase_index;
+    if (phase_index >= samples_per_cycle) phase_index = 0U;
+    return value;
 }
 
-
-// --------------------------------------------------
-// Convert output voltage to DAC code
-// --------------------------------------------------
-
-static uint16_t GeneratorMath_VoltageToDAC(float voltage)
+static void FillBlock(uint16_t *dest, uint16_t count)
 {
-    if (voltage <= OUTPUT_MIN_VOLTAGE)
+    for (uint16_t i = 0U; i < count; ++i)
     {
-        return 0U;
+        const float normalized = NextNormalized();
+        dest[i] = VoltageToDAC(offset + amplitude * normalized);
     }
-
-    if (voltage >= OUTPUT_MAX_VOLTAGE)
-    {
-        return 4095U;
-    }
-
-    float dac_value =
-        ((voltage - OUTPUT_MIN_VOLTAGE) / OUTPUT_RANGE)
-        * DAC_MAX_VALUE;
-
-    return (uint16_t)(dac_value + 0.5f);
 }
-
-
-// --------------------------------------------------
-// Calculate next sample in real time
-// This function runs in interrupt context
-// --------------------------------------------------
-
-static uint16_t GeneratorMath_NextSample(void)
-{
-    // Calculate normalized phase
-    float phase =
-        (float)sample_index / (float)LUT_SIZE;
-
-    // Evaluate waveform equation
-    float normalized =
-        Waveform_Evaluate(current_waveform, phase);
-
-    // Apply amplitude and DC offset
-    float voltage =
-        current_amplitude * normalized + current_offset;
-
-    // Convert output voltage to DAC code
-    uint16_t dac_code =
-        GeneratorMath_VoltageToDAC(voltage);
-
-    // Advance sample position
-    sample_index++;
-
-    if (sample_index >= LUT_SIZE)
-    {
-        sample_index = 0U;
-    }
-
-    return dac_code;
-}
-
-
-// --------------------------------------------------
-// Initialize mathematical generator
-// --------------------------------------------------
 
 void GeneratorMath_Init(void)
 {
     WaveOutput_Stop();
-
-    current_waveform = WAVEFORM_DC;
-    current_amplitude = 0.0f;
-    current_offset = 0.0f;
-
-    sample_index = 0U;
-    math_configured = false;
+    waveform = WAVEFORM_DC;
+    amplitude = 0.0f;
+    offset = 0.0f;
+    samples_per_cycle = LUT_SIZE;
+    phase_index = 0U;
+    configured = false;
 }
 
-
-// --------------------------------------------------
-// Configure waveform parameters
-// --------------------------------------------------
-
-bool GeneratorMath_Configure(Waveform_t waveform,
-                             float amplitude,
-                             float offset)
+bool GeneratorMath_Configure(Waveform_t shape, float peak, float dc_offset)
 {
-    // Validate waveform
-    if (!GeneratorMath_ValidWaveform(waveform))
-    {
+    if (!ValidWaveform(shape) || !isfinite(peak) || !isfinite(dc_offset) ||
+        peak < 0.0f || peak > 5.0f ||
+        dc_offset < -5.0f || dc_offset > 5.0f ||
+        dc_offset + peak > OUTPUT_MAX_V ||
+        dc_offset - peak < OUTPUT_MIN_V)
         return false;
-    }
-
-    // Reject NaN and infinity
-    if (!isfinite(amplitude) || !isfinite(offset))
-    {
-        return false;
-    }
-
-    // Validate individual ranges
-    if (amplitude < 0.0f || amplitude > 5.0f ||
-        offset < -5.0f || offset > 5.0f)
-    {
-        return false;
-    }
-
-    // Validate combined voltage range
-    if ((offset + amplitude > OUTPUT_MAX_VOLTAGE) ||
-        (offset - amplitude < OUTPUT_MIN_VOLTAGE))
-    {
-        return false;
-    }
-
-    // Stop before changing parameters used by the ISR
     WaveOutput_Stop();
-
-    current_waveform = waveform;
-    current_amplitude = amplitude;
-    current_offset = offset;
-
-    sample_index = 0U;
-    math_configured = true;
-
+    waveform = shape;
+    amplitude = peak;
+    offset = dc_offset;
+    configured = true;
+    phase_index = 0U;
     return true;
 }
 
-
-// --------------------------------------------------
-// Start real-time mathematical generation
-// --------------------------------------------------
-
 bool GeneratorMath_Start(float frequency)
 {
-    if (!math_configured)
-    {
-        return false;
-    }
+    if (!configured) return false;
+    SamplePlan_t plan;
+    if (!SamplePlan_Make(frequency, &plan)) return false;
 
-    if (!isfinite(frequency) || frequency < GENERATOR_MIN_FREQUENCY_HZ ||
-        frequency > GENERATOR_MAX_FREQUENCY_HZ)
-    {
-        return false;
-    }
-
-    // Same nominal sample count as LUT mode
-    double sample_rate =
-        (double)frequency * (double)LUT_SIZE;
-
-    // Protect conversion to uint32_t
-    if (!isfinite(sample_rate) ||
-        sample_rate < 1.0 ||
-        sample_rate > ((double)UINT32_MAX - 0.5))
-    {
-        return false;
-    }
-
-    uint32_t sample_rate_hz =
-        (uint32_t)(sample_rate + 0.5);
-
-    // Stop before resetting state used in interrupt context
     WaveOutput_Stop();
-    sample_index = 0U;
+    samples_per_cycle = plan.samples_per_cycle;
+    phase_index = 0U;
+    const float angle = PI2 / (float)samples_per_cycle;
+    sine_first = sinf(angle);
+    sine_coefficient = 2.0f * cosf(angle);
+    previous = -sine_first;
+    current = 0.0f;
 
-    // WaveOutput controls TIM6, DAC and interrupts
-    return WaveOutput_StartRealtime(
-        GeneratorMath_NextSample,
-        sample_rate_hz
-    );
+    /* Initial block must be completely ready before enabling DMA. */
+    FillBlock(dma_buffer, MATH_DMA_BUFFER_SIZE);
+    return WaveOutput_StartStreaming(dma_buffer, MATH_DMA_BUFFER_SIZE,
+                                     plan.sample_rate_hz, FillBlock);
 }
 
-
-// --------------------------------------------------
-// Stop mathematical generation
-// --------------------------------------------------
-
-void GeneratorMath_Stop(void)
-{
-    WaveOutput_Stop();
-}
+void GeneratorMath_Stop(void) { WaveOutput_Stop(); }

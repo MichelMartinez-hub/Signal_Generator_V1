@@ -1,10 +1,10 @@
 #include "generator/generator_lut.h"
 #include "config/board_config.h"
 #include "bsp/wave_output.h"
+#include "generator/sample_plan.h"
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "config/generator_config.h"
 #include <math.h>
 #include <stddef.h>
 
@@ -133,120 +133,87 @@ static const int16_t square_table[LUT_SIZE] =
 };
 
 
-/* RAM buffer used by DMA. Only this module may modify it. */
-static uint16_t lut_buffer[LUT_SIZE];
+
+/* 256-sample normalized waveform is prepared only by Build().
+ * A separate DMA buffer is decimated for high frequency without changing
+ * the original precomputed Flash tables.
+ */
+static uint16_t lut_full[LUT_SIZE];
+static uint16_t dma_buffer[LUT_SIZE];
 static bool lut_ready = false;
 
-/* Private helper: pick the stored table; DC needs no lookup array. */
 static const int16_t *GeneratorLUT_SelectTable(Waveform_t waveform)
 {
     switch (waveform)
     {
-        case WAVEFORM_SINE:     return sine_table;
+        case WAVEFORM_SINE: return sine_table;
         case WAVEFORM_TRIANGLE: return triangle_table;
-        case WAVEFORM_SQUARE:   return square_table;
-        case WAVEFORM_DC:       return NULL;
-        default:                return NULL;
+        case WAVEFORM_SQUARE: return square_table;
+        default: return NULL;
     }
 }
 
-/* Convert ideal bipolar output voltage [-5 V, +5 V]
- * into the DAC code [0, 4095] (assumes calibrated analog output stage).
- */
 static uint16_t GeneratorLUT_VoltageToDAC(float voltage)
 {
-    if (voltage < OUTPUT_MIN_VOLTAGE)
-    {
-        voltage = OUTPUT_MIN_VOLTAGE;
-    }
-    else if (voltage > OUTPUT_MAX_VOLTAGE)
-    {
-        voltage = OUTPUT_MAX_VOLTAGE;
-    }
-
-    float scaled = ((voltage - OUTPUT_MIN_VOLTAGE) /
-                    OUTPUT_RANGE_VOLTAGE) * DAC_FULL_SCALE;
-    return (uint16_t)lroundf(scaled);
+    if (voltage <= OUTPUT_MIN_VOLTAGE) return 0U;
+    if (voltage >= OUTPUT_MAX_VOLTAGE) return 4095U;
+    const float scaled = ((voltage - OUTPUT_MIN_VOLTAGE) /
+                          OUTPUT_RANGE_VOLTAGE) * DAC_FULL_SCALE;
+    return (uint16_t)(scaled + 0.5f);
 }
 
 void GeneratorLUT_Init(void)
 {
-    /* Call after WaveOutput_Init(). */
     WaveOutput_Stop();
-
     for (uint16_t i = 0U; i < LUT_SIZE; ++i)
     {
-        lut_buffer[i] = DAC_MID_SCALE;
+        lut_full[i] = DAC_MID_SCALE;
+        dma_buffer[i] = DAC_MID_SCALE;
     }
     lut_ready = false;
 }
 
 bool GeneratorLUT_Build(Waveform_t waveform, float amplitude, float offset)
 {
-    /* Explicit check is required: NULL also represents the DC waveform. */
-    if (waveform != WAVEFORM_DC &&
-        waveform != WAVEFORM_SINE &&
-        waveform != WAVEFORM_TRIANGLE &&
-        waveform != WAVEFORM_SQUARE)
-    {
+    if (waveform != WAVEFORM_DC && waveform != WAVEFORM_SINE &&
+        waveform != WAVEFORM_TRIANGLE && waveform != WAVEFORM_SQUARE)
         return false;
-    }
 
-    if (!isfinite(amplitude) || !isfinite(offset))
-    {
-        return false;
-    }
-
-    if (amplitude < 0.0f || amplitude > 5.0f ||
+    if (!isfinite(amplitude) || !isfinite(offset) ||
+        amplitude < 0.0f || amplitude > 5.0f ||
         offset < -5.0f || offset > 5.0f ||
         offset + amplitude > OUTPUT_MAX_VOLTAGE ||
         offset - amplitude < OUTPUT_MIN_VOLTAGE)
-    {
         return false;
-    }
 
-    /* Stop DMA before rewriting the buffer in RAM. */
     WaveOutput_Stop();
     lut_ready = false;
-
     const int16_t *table = GeneratorLUT_SelectTable(waveform);
-
     for (uint16_t i = 0U; i < LUT_SIZE; ++i)
     {
-        /* DC waveform is normalized to zero and uses offset alone. */
-        float normalized = (table == NULL)
-                             ? 0.0f
-                             : (float)table[i] / NORMALIZED_FULL_SCALE;
-        float output_voltage = (amplitude * normalized) + offset;
-        lut_buffer[i] = GeneratorLUT_VoltageToDAC(output_voltage);
+        const float normalized = table == NULL ? 0.0f :
+                                (float)table[i] / NORMALIZED_FULL_SCALE;
+        const float voltage = offset + amplitude * normalized;
+        lut_full[i] = GeneratorLUT_VoltageToDAC(voltage);
     }
-
     lut_ready = true;
     return true;
 }
 
 bool GeneratorLUT_Start(float frequency)
 {
-    if (!lut_ready || !isfinite(frequency) || frequency < GENERATOR_MIN_FREQUENCY_HZ ||
-        frequency > GENERATOR_MAX_FREQUENCY_HZ)
-    {
-        return false;
-    }
+    if (!lut_ready) return false;
+    SamplePlan_t plan;
+    if (!SamplePlan_Make(frequency, &plan)) return false;
 
-    /* Frequencies are calculated once on start, not per DAC sample. */
-    double sample_rate = (double)frequency * (double)LUT_SIZE;
-    if (!isfinite(sample_rate) ||
-        sample_rate < 1.0 ||
-        sample_rate > ((double)UINT32_MAX - 0.5))
-    {
-        return false;
-    }
-
-    uint32_t sample_rate_hz = (uint32_t)(sample_rate + 0.5);
-    return WaveOutput_StartBuffer(lut_buffer, (uint16_t)LUT_SIZE, sample_rate_hz);
-}
-
-void GeneratorLUT_Stop(void)
-{
+    /* Never rewrite DMA memory while a transfer is active. */
     WaveOutput_Stop();
+    const uint16_t stride = (uint16_t)(LUT_SIZE / plan.samples_per_cycle);
+    for (uint16_t i = 0U; i < plan.samples_per_cycle; ++i)
+        dma_buffer[i] = lut_full[(uint16_t)(i * stride)];
+
+    return WaveOutput_StartBuffer(dma_buffer, plan.samples_per_cycle,
+                                  plan.sample_rate_hz);
 }
+
+void GeneratorLUT_Stop(void) { WaveOutput_Stop(); }
