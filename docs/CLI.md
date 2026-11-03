@@ -13,7 +13,7 @@ Use 115200 baud, 8N1, and no flow control. Terminate each command with CR or LF.
 | SOURCE REMOTE | Select console control; requires IDLE |
 | MODE LUT / MODE MATH | Select backend; requires REMOTE and IDLE |
 | WAVE DC / SINE / TRIANGLE / SQUARE | Select waveform; requires REMOTE and IDLE |
-| FREQ value | 1–100 Hz; requires REMOTE and IDLE |
+| FREQ value | 1–50,000 Hz; requires REMOTE and IDLE |
 | AMP value | 0–5 V peak; requires REMOTE, IDLE, and offset headroom |
 | OFFSET value | −5 to +5 V; requires REMOTE, IDLE, and amplitude headroom |
 
@@ -60,7 +60,7 @@ SOURCE LOCAL
 START
 ```
 
-Firmware relearns the potentiometer readings. It requires three matching quantized observations taken every 50 ms; filtering can extend settling time. The encoder cycles through DC → SINE → TRIANGLE → SQUARE. LOCAL starts with SINE selected.
+Firmware relearns the potentiometer readings. It requires three matching quantized observations taken every 50 ms; filtering can extend settling time. PC0 now covers 1–50,000 Hz in both backends. See [local mapping and bench procedure](../README_PATCH_50KHZ.md#local-frequency-control). The encoder cycles through DC → SINE → TRIANGLE → SQUARE. LOCAL starts with SINE selected.
 
 ## Responses and troubleshooting
 

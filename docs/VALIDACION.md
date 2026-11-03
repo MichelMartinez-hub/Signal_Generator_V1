@@ -2,7 +2,11 @@
 
 **Physical hardware validation is pending. No measurement results have been recorded.**
 
-## Available evidence
+## Current software evidence (2026-11-02)
+
+The host suite and ARM build passed for the 1–50 kHz PC0 change. Board measurements remain pending. See [PC0 bench procedure](../README_PATCH_50KHZ.md#local-frequency-control).
+
+## Historical evidence
 
 | Check | Status on 2026-10-26 | Evidence |
 |---|---|---|
@@ -30,7 +34,7 @@ Record board revision, exact commit, PlatformIO/platform/toolchain versions, pow
 - [ ] Test DC through offset, and sine/triangle/square in LUT mode at 1 and 10 Hz.
 - [ ] Record actual frequency, minimum/maximum levels, offset, and Vpp.
 - [ ] Repeat in MATH mode at 1 and 10 Hz, observing latency and sample regularity.
-- [ ] Increase gradually to 100 Hz only after checking ISR timing and stability.
+- [ ] Increase gradually through 1, 10, 25 and 50 kHz only after checking ISR timing and stability.
 - [ ] Check LUT/MATH transitions, STOP/START, and configuration changes.
 - [ ] Validate all three potentiometers: endpoints, noise, settling, and combined limits.
 - [ ] Validate encoder direction and steps, including all four waveform selections.

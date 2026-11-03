@@ -37,13 +37,13 @@ powershell -ExecutionPolicy Bypass -File tests_host/run.ps1
 
 WaveOutput is replaced with simulated functions. Tests exercise tables, mathematical samples, parameter limits, backend selection, and the protocol. They do not execute real peripherals, interrupts, ADC, DMA, or electrical behavior, and do not cover the entire App/CLI flow. They use assert; do not compile them with NDEBUG.
 
-**Status:** the suite is prepared, but a successful run has not yet been confirmed. Firmware compilation was confirmed by the owner on October 26, 2026.
+**2026-11-02:** the host suite and the ARM firmware build passed. The suite now exercises CLI and App source selection with simulated UART, controls, scheduler ticks and output.
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| FREQ rejected | Select REMOTE and IDLE; use a finite value between 1 and 100 |
+| FREQ rejected | Select REMOTE and IDLE; use a finite value between 1 and 50,000 |
 | AMP/OFFSET rejected | Check combined headroom; reduce AMP before moving OFFSET |
 | START rejected | Check STATUS; stop, or resolve and reset FAULT |
 | No CLI response | Check port, 115200 8N1, cable, VCP routing/bridges, and ground |

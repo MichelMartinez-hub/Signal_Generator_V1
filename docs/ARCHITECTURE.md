@@ -56,16 +56,12 @@ In REMOTE mode, START begins generation with the configured settings. In LOCAL m
 
 ## Sampling and controls
 
-- TIM6 uses a rounded interval: `ticks = round(16 MHz / Fs)` and `ARR = ticks - 1`, with PSC = 0. The implementation accepts 2–65536 ticks.
-- Both backends request `Fs = round(frequency * 256)`. The actual waveform frequency depends on the integer interval accepted by TIM6.
-- LUT transfers samples from RAM to the DAC through DMA1 Stream5 Channel7 in circular mode.
-- MATH uses the TIM6 IRQ and a callback to prepare the next DAC sample. Latency and initial phase still require bench measurement.
-- TIM3 generates 10 ms ticks. Controls are polled every five ticks; ADC conversion and application logic do not run inside the TIM3 IRQ.
-- Potentiometer readings use an IIR filter with alpha 0.18 and quantization of 1 Hz / 0.1 V. Three stable readings reduce noise-induced changes; this does not establish immunity to real input noise.
-- The encoder cycles through DC, SINE, TRIANGLE, and SQUARE, using four counts per logical step.
+PC0 uses five linear segments spanning successive frequency bands. ParameterManager filters the ADC, holds its accepted position within a five-count deadband, quantizes the frequency, and applies three matching observations only if effective settings differ from the last applied settings. TIM3 schedules these observations every 50 ms. PC1 and PB0 retain their existing amplitude and offset processing. See [the current transfer curve and TIM6 examples](../README_PATCH_50KHZ.md#local-frequency-control).
+
+Both backends use SamplePlan at START. LUT uses circular DMA with a decimated table; MATH refills alternating DMA half-buffers. TIM6 uses its prescaler and reload register to approximate the requested sample rate from an 84 MHz timer clock.
 
 ## Concurrency
 
-Parameters and buffers are changed in foreground after stopping the output. TIM3 updates a volatile 32-bit tick counter. USART2 uses a 128-byte RX ring buffer with one reserved slot. TIM6 calls the sample provider only in MATH mode. Each interrupt handler must have exactly one definition.
+Parameters and buffers are changed in foreground after stopping the output. TIM3 updates a volatile 32-bit tick counter. USART2 uses a 128-byte RX ring buffer with one reserved slot. DMA half-transfer and transfer-complete events drive the MATH refill callback. Each interrupt handler must have exactly one definition.
 
 Configured interrupt priorities are TIM6 = 5, TIM3 = 6, and USART2 = 7. Timing and sample loss require hardware validation; these priorities do not demonstrate that real-time deadlines are met.
